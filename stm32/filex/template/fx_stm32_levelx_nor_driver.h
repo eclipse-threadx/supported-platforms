@@ -65,7 +65,7 @@ extern UCHAR lx_stm32_nor_custom_extended_cache_memory[LX_STM32_CUSTOM_OBSOLETE_
 #endif
  */
 
-/* USER CODE BEIGN NOR_CUSTOM_DRIVERS */
+/* USER CODE BEGIN NOR_CUSTOM_DRIVERS */
 
 /* USER CODE END NOR_CUSTOM_DRIVERS */
 
