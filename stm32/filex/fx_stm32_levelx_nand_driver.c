@@ -37,7 +37,7 @@ static struct fx_lx_nand_driver_instance *current_driver = NULL;
 ULONG fx_lx_nand_driver_buffer[(7 * TOTAL_BLOCKS + 4 + 2 * (BYTES_PER_PHYSICAL_PAGE + SPARE_BYTES_PER_PAGE)) / sizeof(ULONG)];
 
 /* Exported constants --------------------------------------------------------*/
-static const ULONG  num_drivers = sizeof(fx_lx_nand_drivers)/sizeof(fx_lx_nand_drivers[0]);
+static const ULONG num_drivers = sizeof(fx_lx_nand_drivers)/sizeof(fx_lx_nand_drivers[0]);
 
 /* Exported functions ------------------------------------------------------- */
 
@@ -54,14 +54,12 @@ static UINT find_driver_id(UINT driver_id)
     return UNKNOWN_DRIVER_ID;
 }
 
-VOID  fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
+VOID fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
 {
     ULONG i;
     UINT status;
     UCHAR *source_buffer;
     UCHAR *destination_buffer;
-    ULONG logical_sector;
-
 
     /* Process the driver request specified in the media control block.*/
 #ifdef USE_LX_NAND_DEFAULT_DRIVER
@@ -132,16 +130,22 @@ VOID  fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
 
         case FX_DRIVER_UNINIT:
             {
-                /* Successful driver */
+                if (current_driver->initialized == FX_FALSE)
+                {
+                    media_ptr->fx_media_driver_status = FX_SUCCESS;
+                    break;
+                }
+
                 status = lx_nand_flash_close(&current_driver->flash_instance);
+                current_driver->initialized = FX_FALSE;
 
                 if (status == LX_SUCCESS)
                 {
-                    media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                    media_ptr->fx_media_driver_status = FX_SUCCESS;
                 }
                 else
                 {
-                    media_ptr->fx_media_driver_status =  FX_IO_ERROR;
+                    media_ptr->fx_media_driver_status = FX_IO_ERROR;
                 }
 
                 break;
@@ -149,34 +153,11 @@ VOID  fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
 
         case FX_DRIVER_READ:
             {
-                /* Setup the destination buffer and logical sector.  */
-                logical_sector = media_ptr->fx_media_driver_logical_sector;
-                destination_buffer =(UCHAR *)media_ptr->fx_media_driver_buffer;
+                destination_buffer = (UCHAR *) media_ptr->fx_media_driver_buffer;
 
-                /* Loop to read sectors from flash.  */
-                for (i = 0; i < media_ptr->fx_media_driver_sectors; i++)
-                {
+                status = lx_nand_flash_sectors_read(&current_driver->flash_instance, media_ptr->fx_media_driver_logical_sector, destination_buffer, media_ptr->fx_media_driver_sectors);
 
-                    /* Read a sector from NAND flash.  */
-                    status =  lx_nand_flash_sector_read(&current_driver->flash_instance, logical_sector, destination_buffer);
-
-                    /* Determine if the read was successful.  */
-                    if (status != LX_SUCCESS)
-                    {
-
-                        /* Return an I/O error to FileX.  */
-                        media_ptr->fx_media_driver_status = FX_IO_ERROR;
-
-                        return;
-                    }
-
-                    /* Move to the next entries.  */
-                    logical_sector++;
-                    destination_buffer = destination_buffer + media_ptr->fx_media_bytes_per_sector;
-                }
-
-                /* Successful driver request.  */
-                media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                media_ptr->fx_media_driver_status = (status == LX_SUCCESS) ? FX_SUCCESS : FX_IO_ERROR;
 
                 break;
             }
@@ -187,52 +168,32 @@ VOID  fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
                 /* Read the boot record and return to the caller.  */
 
                 /* Setup the destination buffer.  */
-                destination_buffer =  (UCHAR *) media_ptr -> fx_media_driver_buffer;
+                destination_buffer = (UCHAR *) media_ptr -> fx_media_driver_buffer;
 
                 /* Read boot sector from NAND flash.  */
-                status =  lx_nand_flash_sector_read(&current_driver->flash_instance, 0, destination_buffer);
+                status = lx_nand_flash_sector_read(&current_driver->flash_instance, 0, destination_buffer);
 
                 /* Determine if the boot read was successful.  */
                 if (status != LX_SUCCESS)
                 {
                     /* Return an I/O error to FileX.  */
-                    media_ptr -> fx_media_driver_status =  FX_IO_ERROR;
+                    media_ptr -> fx_media_driver_status = FX_IO_ERROR;
 
                     return;
                 }
 
                 /* Successful driver request.  */
-                media_ptr -> fx_media_driver_status =  FX_SUCCESS;
+                media_ptr -> fx_media_driver_status = FX_SUCCESS;
                 break;
             }
 
         case FX_DRIVER_WRITE:
             {
-                /* Setup the source buffer and logical sector.  */
-                logical_sector = media_ptr->fx_media_driver_logical_sector;
                 source_buffer = (UCHAR *) media_ptr->fx_media_driver_buffer;
 
-                /* Loop to write sectors to flash.  */
-                for (i = 0; i < media_ptr->fx_media_driver_sectors; i++)
-                {
-                    /* Write a sector to NAND flash.  */
-                    status =  lx_nand_flash_sector_write(&current_driver->flash_instance, logical_sector, source_buffer);
+                status = lx_nand_flash_sectors_write(&current_driver->flash_instance, media_ptr->fx_media_driver_logical_sector, source_buffer, media_ptr->fx_media_driver_sectors);
 
-                    /* Determine if the write was successful.  */
-                    if (status != LX_SUCCESS)
-                    {
-                        /* Return an I/O error to FileX.  */
-                        media_ptr->fx_media_driver_status =  FX_IO_ERROR;
-                        return;
-                    }
-
-                    /* Move to the next entries.  */
-                    logical_sector++;
-                    source_buffer =  source_buffer + media_ptr->fx_media_bytes_per_sector;
-                }
-
-                /* Successful driver request.  */
-                media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                media_ptr->fx_media_driver_status = (status == LX_SUCCESS) ? FX_SUCCESS : FX_IO_ERROR;
                 break;
             }
 
@@ -242,71 +203,51 @@ VOID  fx_stm32_levelx_nand_driver(FX_MEDIA *media_ptr)
                 /* Write the boot record and return to the caller.  */
 
                 /* Setup the source buffer.  */
-                source_buffer =       (UCHAR *) media_ptr -> fx_media_driver_buffer;
+                source_buffer = (UCHAR *) media_ptr -> fx_media_driver_buffer;
 
                 /* Write boot sector to NAND flash.  */
-                status =  lx_nand_flash_sector_write(&current_driver->flash_instance, 0, source_buffer);
+                status = lx_nand_flash_sector_write(&current_driver->flash_instance, 0, source_buffer);
 
                 /* Determine if the boot write was successful.  */
                 if (status != LX_SUCCESS)
                 {
 
                     /* Return an I/O error to FileX.  */
-                    media_ptr -> fx_media_driver_status =  FX_IO_ERROR;
+                    media_ptr -> fx_media_driver_status = FX_IO_ERROR;
 
                     return;
                 }
 
                 /* Successful driver request.  */
-                media_ptr -> fx_media_driver_status =  FX_SUCCESS;
+                media_ptr -> fx_media_driver_status = FX_SUCCESS;
                 break ;
             }
         case FX_DRIVER_RELEASE_SECTORS:
             {
-                /* Setup the logical sector.  */
-                logical_sector =  media_ptr->fx_media_driver_logical_sector;
+                status = lx_nand_flash_sectors_release(&current_driver->flash_instance, media_ptr->fx_media_driver_logical_sector, media_ptr->fx_media_driver_sectors);
 
-                /* Release sectors.  */
-                for (i = 0; i < media_ptr->fx_media_driver_sectors; i++)
-                {
-                    /* Release NAND flash sector.  */
-                    status = lx_nand_flash_sector_release(&current_driver->flash_instance, logical_sector);
-
-                    /* Determine if the sector release was successful.  */
-                    if (status != LX_SUCCESS)
-                    {
-                        /* Return an I/O error to FileX.  */
-                        media_ptr->fx_media_driver_status = FX_IO_ERROR;
-                        return;
-                    }
-
-                    /* Move to the next entries.  */
-                    logical_sector++;
-                }
-
-                /* Successful driver request.  */
-                media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                media_ptr->fx_media_driver_status = (status == LX_SUCCESS) ? FX_SUCCESS : FX_IO_ERROR;
                 break;
             }
 
         case FX_DRIVER_FLUSH:
             {
                 /* Return driver success.  */
-                media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                media_ptr->fx_media_driver_status = FX_SUCCESS;
                 break;
             }
 
         case FX_DRIVER_ABORT:
             {
                 /* Return driver success.  */
-                media_ptr->fx_media_driver_status =  FX_SUCCESS;
+                media_ptr->fx_media_driver_status = FX_SUCCESS;
                 break;
             }
 
         default:
             {
                 /* Invalid driver request.  */
-                media_ptr->fx_media_driver_status =  FX_IO_ERROR;
+                media_ptr->fx_media_driver_status = FX_IO_ERROR;
                 break;
             }
     }
