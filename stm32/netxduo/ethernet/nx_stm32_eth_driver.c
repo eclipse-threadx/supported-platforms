@@ -1495,7 +1495,10 @@ static UINT  _nx_driver_hardware_initialize(NX_IP_DRIVER *driver_req_ptr)
   FilterConfig.HashMulticast = DISABLE;
   FilterConfig.DestAddrInverseFiltering = DISABLE;
   FilterConfig.PassAllMulticast = DISABLE;
-  FilterConfig.BroadcastFilter = ENABLE;
+  /* Note: In some old HAL implementations (STM32F7 and STM32H7), a bug
+  requires setting BroadcastFilter to ENABLE (the behavior of the ENABLE
+  and DISABLED values is flipped). */
+  FilterConfig.BroadcastFilter = DISABLE;
   FilterConfig.SrcAddrInverseFiltering = DISABLE;
   FilterConfig.SrcAddrFiltering = DISABLE;
   FilterConfig.HachOrPerfectFilter = DISABLE;
